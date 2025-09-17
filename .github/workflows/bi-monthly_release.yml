@@ -353,7 +353,8 @@ jobs:
           $repoFull = $env:GITHUB_REPOSITORY
           $repoName = $repoFull.Split('/')[1]
           $branchName = $env:GITHUB_REF_NAME
-          $sketchZip = Join-Path $root ("{0}.zip" -f $branchName)
+          $branchFileName = Split-Path -Path $branchName -Leaf
+          $sketchZip = Join-Path $root ("{0}.zip" -f $branchFileName)
           $downloadUrl = "https://github.com/{0}/archive/refs/heads/{1}.zip" -f $repoFull, $branchName
           Get-FileWithProgress -Url $downloadUrl -Destination $sketchZip
           Expand-Zip -ZipPath $sketchZip -OutPath $root
