@@ -20,8 +20,10 @@ jobs:
 
       - name: Check for commits in the last 60 days
         run: |
-          git fetch origin master
-          COMMITS=$(git rev-list --count --since="60 days ago" origin/master)
+          # Use the current branch instead of hardcoding master
+          BRANCH="${GITHUB_REF_NAME}"
+          git fetch origin "$BRANCH"
+          COMMITS=$(git rev-list --count --since="60 days ago" "origin/${BRANCH}")
           echo "Commits in last 60 days: $COMMITS"
           if [ "$COMMITS" -lt 3 ]; then
             echo "$COMMITS commits in the last 60 days. Skipping release."
@@ -347,12 +349,22 @@ jobs:
 
           ### Step 6: OSCR Sketch ###
           Write-Host "Step 6: Downloading OSCR sketch..." -ForegroundColor Green
-          $sketchZip = Join-Path $root "master.zip"
-          Get-FileWithProgress -Url "https://github.com/sanni/cartreader/archive/refs/heads/master.zip" -Destination $sketchZip
+          # Download the archive of the current repository and branch
+          $repoFull = $env:GITHUB_REPOSITORY
+          $repoName = $repoFull.Split('/')[1]
+          $branchName = $env:GITHUB_REF_NAME
+          $sketchZip = Join-Path $root ("{0}.zip" -f $branchName)
+          $downloadUrl = "https://github.com/{0}/archive/refs/heads/{1}.zip" -f $repoFull, $branchName
+          Get-FileWithProgress -Url $downloadUrl -Destination $sketchZip
           Expand-Zip -ZipPath $sketchZip -OutPath $root
           Remove-Item $sketchZip
 
-          $sketchRoot = Join-Path $root "cartreader-master"
+          # Determine extracted folder dynamically (format: <repo>-<branch>, branch may contain '-')
+          $extractedDir = Get-ChildItem -Path $root -Directory | Where-Object { $_.Name -like ("{0}-*" -f $repoName) } | Select-Object -First 1
+          if (-not $extractedDir) {
+              throw "Could not locate extracted sketch root for repo $repoName."
+          }
+          $sketchRoot = $extractedDir.FullName
 
           # Delete existing Cart_Reader folder if it exists before moving the new one
           $cartReaderDest = "$root\Arduino IDE\portable\sketchbook\Cart_Reader"
@@ -494,7 +506,7 @@ jobs:
           git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
           git config core.sparseCheckout true
           echo Cart_Reader/OSCR.cpp > .git/info/sparse-checkout
-          git pull origin master
+          git pull origin "${{ github.ref_name }}"
         shell: bash
 
       - name: Bump version in OSCR.cpp and push
@@ -525,5 +537,5 @@ jobs:
           git config user.email "github-actions@github.com"
           git add Cart_Reader/OSCR.cpp
           git commit -m "Bump version to ${NEW_VERSION} after bi-monthly release"
-          git push origin HEAD:master
+          git push origin HEAD:"${{ github.ref_name }}"
         shell: bash
